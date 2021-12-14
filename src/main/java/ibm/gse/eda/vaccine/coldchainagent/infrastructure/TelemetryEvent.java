@@ -8,6 +8,7 @@ public class TelemetryEvent {
     public String containerID;
     public Telemetry payload;
     public String timestamp;
+    public String eventLogTime;
     public String type;
 
     public TelemetryEvent(){}
@@ -17,6 +18,7 @@ public class TelemetryEvent {
         return "{" + 
             "containerID: " + this.containerID + ", " +
             "timestamp: " + this.timestamp + ", " +
+            "eventLogTime: " + this.eventLogTime + ", " + 
             "type: " + this.type + ", " +
             "payload: " + this.payload.toString() +
             "}";

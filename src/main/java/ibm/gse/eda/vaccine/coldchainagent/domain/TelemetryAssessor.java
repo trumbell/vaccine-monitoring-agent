@@ -7,6 +7,7 @@ import javax.enterprise.inject.Produces;
 import javax.inject.Inject;
 
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -17,6 +18,7 @@ import org.apache.kafka.streams.kstream.KGroupedStream;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.kstream.Produced;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.reactive.messaging.Channel;
@@ -31,6 +33,8 @@ import ibm.gse.eda.vaccine.coldchainagent.infrastructure.scoring.ScoringTelemetr
 import ibm.gse.eda.vaccine.coldchainagent.infrastructure.scoring.ScoringTelemetryWrapper;
 import ibm.gse.eda.vaccine.coldchainagent.infrastructure.scoring.WMLScoringClient;
 import io.quarkus.kafka.client.serialization.ObjectMapperSerde;
+
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
 /**
  * A bean consuming telemetry events from the "telemetries" Kafka topic and
@@ -56,6 +60,10 @@ public class TelemetryAssessor {
     @Inject
     @ConfigProperty(name = "temperature.max.occurence.count", defaultValue = "12")
     public int maxCount;
+
+    @Inject
+    @ConfigProperty(name = "wait.time", defaultValue = "0")
+    public int waitTime;
 
     @Inject
     @ConfigProperty(name = "prediction.enabled", defaultValue = "false")
@@ -105,13 +113,6 @@ public class TelemetryAssessor {
                         return new KeyValue<String, TelemetryEvent>(v.containerID, null);
                     }
                 });
-        // for each message potentially call anomaly detector
-        telemetryStream.peek(( k,telemetryEvent ) -> {
-             if (anomalyDetectionEnabled) {
-                anomalyDetector(k, telemetryEvent);
-             }
-             
-         });
 
         // group stream by key and serialized with key as string and value as TelemetryEvent
         KGroupedStream<String, TelemetryEvent> telemetryGroup = telemetryStream.groupByKey(Grouped.with(Serdes.String(), telemetryEventSerde));
@@ -133,6 +134,32 @@ public class TelemetryAssessor {
                 LOG.info("Send Notification **************->>> or message to reeferAlert topic. ");
                 reeferEventEmitter.send(new ReeferAlert(k,LocalDateTime.now(),v));
         });
+
+        ObjectMapperSerde<TelemetryLag> telemetryLagSerde = new ObjectMapperSerde<>(
+                TelemetryLag.class);
+        final Serde<String> stringSerde = Serdes.String();
+        // for each message potentially call anomaly detector
+        telemetryStream.peek(( k,telemetryEvent ) -> {
+            // add a delay to simulate a longer telemetry time
+            wait(waitTime);
+            String eventProcessedTime = LocalDateTime.now().toString();
+            if (anomalyDetectionEnabled) {
+                anomalyDetector(k, telemetryEvent);
+            }
+            LOG.info("Time telemetry logged: " + telemetryEvent.eventLogTime.toString() + " --> " + 
+                    eventProcessedTime + " :Time telemetry processing complete");
+        })
+        .map((k, telemetryEvent) -> {
+            TelemetryLag tl = new TelemetryLag();
+            tl.eventLogTime = telemetryEvent.eventLogTime;
+            tl.eventProcessedTime = LocalDateTime.now().toString();
+            return new KeyValue<String, TelemetryLag>(k, tl);
+        })
+        .peek((k, telemetryLag) -> {
+            LOG.info("TelemetryLag: " + telemetryLag.toString());
+        })
+        .to("reefer.telemetries.processedtime", Produced.with(stringSerde, telemetryLagSerde));
+
         return builder.build();
     }
 
@@ -182,4 +209,31 @@ public class TelemetryAssessor {
          ScoringTelemetryWrapper wrapper = new ScoringTelemetryWrapper(st);
          return anomalyDetectionScoringService.assessTelemetry(wrapper);
      }
+
+    public void wait(int ms)
+    {
+        try
+        {
+            Thread.sleep(ms);
+        }
+        catch(InterruptedException ex)
+        {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+
+class TelemetryLag {
+    public String eventProcessedTime;
+    public String eventLogTime;
+
+    public TelemetryLag(){}
+
+   
+    public String toString(){
+        return "{" + 
+            "eventLogTime: " + this.eventLogTime + ", " + 
+            "eventProcessedTime: " + this.eventProcessedTime + ", " +
+            "}";
+    }
 }

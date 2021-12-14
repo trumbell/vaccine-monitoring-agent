@@ -1,0 +1,21 @@
+apiVersion: v1
+data:
+  AFKA_SSL_TRUSTSTORE_PASSWORD: changeit
+  EDA_LOGGING_LEVEL: INFO
+  KAFKA_BOOTSTRAP_SERVERS: vaccine-kafka-kafka-bootstrap-trumbell.o7-111a9c298953d78649164b7e8394bcdc-0000.us-south.containers.appdomain.cloud:443
+  KAFKA_CA_CERT_NAME: "null"
+  KAFKA_CERT: /deployments/certs/ca.crt
+  KAFKA_PASSWORD: HKJgxtwU75ys
+  KAFKA_SASL_JAAS_CONFIG: org.apache.kafka.common.security.scram.ScramLoginModule required username="scram-user" password="cp6aYMO0BHbg";
+  KAFKA_SASL_MECHANISM: SCRAM-SHA-512
+  KAFKA_SECURITY_PROTOCOL: SASL_SSL
+  KAFKA_USER: scram-user
+  POD_IP: localhost
+  PREDICTION_ENABLED: "False"
+  REEFER_TOPIC: vaccine.reeferalerts
+  TELEMETRY_TOPIC: reefer.telemetries
+  WAIT_TIME: "250"
+kind: ConfigMap
+metadata:
+  name: vaccine-monitoring-trumbell-configmap
+  namespace: gevokcvgseu
